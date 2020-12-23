@@ -4,17 +4,49 @@ const bodyParser = require("body-parser");
 const app = express();
 const sequelize = require("sequelize");
 const mysql = require("mysql2");
+const jwt = require("jsonwebtoken");
 
+//PASSPORT
+const passport = require("passport");
+const passportJWT = require("passport-jwt");
+
+//MODELOS
 let accounts = require("./models").cuentas;
 
+//LOGGER
 app.use(logger("dev"));
-//variables de entorno
+
+//Variables de entorno
 require("dotenv").config();
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-//HELPERS
+//JWT -> CONFIGURACIONES
+let ExtractJwt = passportJWT.ExtractJwt;
+let JwtStrategy = passportJWT.Strategy;
+
+//JWT -> OPCIONES
+let jwtOptions = {};
+jwtOptions.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
+jwtOptions.secretOrKey = 'superclavesecreta';
+
+//JWT -> CREAR LA ESTRATEGIA
+let strategy = new JwtStrategy(jwtOptions, function(jwt_payload, next){
+
+let user = getUser({id: jwt_payload.id})
+
+if(user) {
+    next(null, user)
+}else{
+    next(null, false)
+}
+});
+
+//Poner en funcionamiento la estrategia creada
+passport.use(strategy);
+
+app.use(passport.initialize());
 
 //TRAE TODOS LOS USUARIOS
 const getAllUsers = async () =>{
@@ -33,21 +65,12 @@ const getUser = async obj =>{
     })
 } 
 
-//COMPROBAR TOKEN
-const accesToken = (token) =>{
-    if(token === "123456"){
-        return "Estado de caja: $50000"
-    }else{
-        return "no está autorizado para ver estado de caja"
-    }
-}
-
-//rutas y funciones.
+//Rutas y funciones
 app.get("/", function (req, res) {
    getAllUsers().then(users => res.json(users));
 });
 
-app.post("/", function(req, res){
+app.post("/alta", function(req, res){
     const { username, password } = req.body;
  
     createUser({ username, password }).then(user => res.json(user));
@@ -63,8 +86,12 @@ app.post("/login", async function(req, res){
                 res.json("problema con el usuario");
             }
             if(user.password === password){
-                let token = "123456";
-                res.json(token);
+                let payload = {id: user.id};
+                let token = jwt.sign(payload, jwtOptions.secretOrKey );
+                res.json({
+                    msg: "ok",
+                    token: token
+                })
             }else{
                 res.json("password incorrecto")
             }
@@ -72,20 +99,11 @@ app.post("/login", async function(req, res){
     }else{
         res.json("error logueo")
     }
-
 })
 
-app.post("/caja", function(req,res) {
-    let token = req.body.token;
-
-    if(token){
-        let result = accesToken(token);
-        res.json(result)
-    }else{
-        res.json("no existe token")
-    }
+app.post("/caja", passport.authenticate('jwt', {session: false}), function(req,res) {    
+    res.json("Estado de caja: $50000");
 })
-
 
 //Verificación Ambiente
 let port;
