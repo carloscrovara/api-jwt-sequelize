@@ -16,7 +16,7 @@ let accounts = require("./models").cuentas;
 //LOGGER
 app.use(logger("dev"));
 
-//Variables de entorno
+//Variables de Entorno
 require("dotenv").config();
 
 app.use(bodyParser.json());
